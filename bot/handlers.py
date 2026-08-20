@@ -1,12 +1,13 @@
 from aiogram import Router, F 
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message
+import bot.keyboards as kb
 
 router = Router()
 
 @router.message(CommandStart())
 async def cmd_start(message: Message):
-    await message.answer('Hey!')
+    await message.answer('Hey!', reply_markup=kb.main)
 
 @router.message(Command('help'))
 async def get_help(message: Message):
@@ -14,4 +15,4 @@ async def get_help(message: Message):
 
 @router.message(F.photo)
 async def get_photo(message: Message):
-    await message.answer(f'ID photo: {message.photo[-1].file_id}')
+    await message.reply(f'ID photo: {message.photo[-1].file_id}')
