@@ -5,6 +5,7 @@ import bot.keyboards as kb
 from aiogram.fsm.context import FSMContext
 import bot.states as st
 from aiogram.enums import ParseMode
+from datetime import datetime
 
 router = Router()
 
@@ -64,15 +65,44 @@ async def img_upload(callback: CallbackQuery):
         caption='Send photo like this one:'
     )
 
+def day_data_validation(parts: list) -> bool:
+    if len(parts) > 3:
+        return False
+    
+    try:
+        datetime.strptime(parts[0], "%d.%m.%y %H:%M")
+    except ValueError:
+        return False
+
+    return True
+    
+
 @router.message(st.Upl.day_data)
 async def Upl_first(message: Message, state: FSMContext):
+    parts = message.text.split('\n')
+    text = (
+    "Ви ввели невірні дані. Спробуйте знову, слідуючи такому формату -\n\n"
+    "<code>dd.mm.yyyy xx:xx\n"
+    "Song\n"
+    "Author</code>\n\n"
+    "Автор та назва пісні необов'язкові."
+    )   
+    if not day_data_validation(parts):
+        await message.answer(text, parse_mode=ParseMode.HTML)
+        return 
+
     await state.update_data(day_data=message.text)
     await state.set_state(st.Upl.confirmation)
-    await message.answer(f'Are you sure that your data is: {message.text}?')
+    await message.answer(f'Are you sure that your data is:\n{message.text}?')
 
 @router.message(st.Upl.confirmation)
-async def Upl_first(message: Message, state: FSMContext):
+async def Upl_second(message: Message, state: FSMContext):
     await state.update_data(confirmation=message.text)
     data = await state.get_data()
-    await message.answer(f'Thanks! {data["day_data"]} and {data["confirmation"]}')
-    await state.clear()
+    if data["confirmation"].lower() == 'yes':
+        await message.answer(f'Thanks! We have saved it')
+        await state.clear()
+    else: 
+        await message.answer(f"Ok, try again. We haven't saved your data")
+        await state.clear()
+    
