@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from aiogram import Bot, Dispatcher
-
+from datab import db 
 from bot.config import TOKEN
 from bot.handlers import router
 
@@ -11,7 +11,10 @@ async def main():
     
     dp.include_router(router)
     
-    print("Bot is started successfully!")
+    await db.create_database()
+    print('!Database is created successfully!')
+    
+    print("!Bot is started successfully!")
     await dp.start_polling(bot)
 
 if __name__ == '__main__':
@@ -20,4 +23,3 @@ if __name__ == '__main__':
         asyncio.run(main())
     except KeyboardInterrupt:
         print('Exit')
-    
