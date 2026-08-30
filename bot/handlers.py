@@ -35,7 +35,17 @@ async def download_data(message: Message):
 @router.callback_query(F.data == 'listform')
 async def listform(callback: CallbackQuery):
     await callback.answer('')
-    await callback.message.edit_text('09.11 - 14:48')
+    user_id = callback.from_user.id
+    records = await db.user_captures_list(user_id)
+
+    if not records:
+        text = "You don't have any records so far"
+    else:
+        text = "<b>Your records:</b>\n\n"
+        for idx, (captured_at, title, author) in enumerate(records, start=1):
+            song_info = f"{title} - {author}" if title and author else "Without music"
+            text += f"{idx}. {captured_at} | {song_info}\n"
+    await callback.message.edit_text(text, parse_mode=ParseMode.HTML)
 
 
 
@@ -71,11 +81,16 @@ async def img_upload(callback: CallbackQuery):
 def day_data_validation(parts: list) -> bool:
     if len(parts) > 3:
         return False
-    
+
+    date_string = parts[0].strip()
+
     try:
-        datetime.strptime(parts[0], "%d.%m.%y %H:%M")
+        datetime.strptime(date_string, "%d.%m.%y %H:%M")
     except ValueError:
-        return False
+        try:
+                datetime.strptime(date_string, "%d.%m.%Y %H:%M")
+        except ValueError:
+            return False
 
     return True
     
@@ -85,7 +100,7 @@ async def Upl_first(message: Message, state: FSMContext):
     parts = message.text.split('\n')
     text = (
     "Ви ввели невірні дані. Спробуйте знову, слідуючи такому формату -\n\n"
-    "<code>dd.mm.yyyy xx:xx\n"
+    "<code>dd.mm.yy xx:xx\n"
     "Song\n"
     "Author</code>\n\n"
     "Автор та назва пісні необов'язкові."
@@ -105,9 +120,9 @@ async def Upl_second(message: Message, state: FSMContext):
         data = await state.get_data()
         parts = data["day_data"].split('\n')
 
-        captured_at = parts[0]
-        music_title = parts[1] if len(parts) > 1 else None
-        author = parts[2] if len(parts) > 2 else None
+        captured_at = parts[0].strip()
+        music_title = parts[1].strip() if len(parts) > 1 else None
+        author = parts[2].strip() if len(parts) > 2 else None
 
         await db.add_capture(message.from_user.id, captured_at, music_title, author)
 
