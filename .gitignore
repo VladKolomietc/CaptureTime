@@ -11,4 +11,4 @@ __pycache__/
 bot/config.py
 
 # Ігноруємо всі бази даних 
-*.db
+*.db*

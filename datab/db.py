@@ -1,4 +1,5 @@
 import aiosqlite
+from datetime import datetime
 
 DB_PATH = 'datab/capture_time.db'
 
@@ -26,3 +27,23 @@ async def create_database():
         """)
         
         await db.commit()
+
+async def add_user(tg_id: int, user_name: str):
+    async with aiosqlite.connect(DB_PATH) as db: 
+        await db.execute("""
+            INSERT OR IGNORE INTO users (tg_id, user_name)
+            VALUES (?, ?);
+        """, (tg_id, user_name))
+        await db.commit()
+
+    print(f"{user_name} with tg id {tg_id} was inserted")
+    
+async def add_capture(tg_id: int, captured_at: str, music_title: str, author: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            INSERT INTO capture (user_id, captured_at, music_title, author)
+            VALUES ((SELECT id FROM users WHERE tg_id = ?), ?, ?, ?);
+        """, (tg_id, captured_at, music_title, author))
+        await db.commit()
+
+    print(f"New capture is created for tg_id {tg_id}")

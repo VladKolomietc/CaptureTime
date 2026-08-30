@@ -6,11 +6,14 @@ from aiogram.fsm.context import FSMContext
 import bot.states as st
 from aiogram.enums import ParseMode
 from datetime import datetime
+from datab import db
 
 router = Router()
 
 @router.message(CommandStart())
 async def cmd_start(message: Message):
+    await db.add_user(message.from_user.id, message.from_user.username)
+
     await message.answer('Hey!', reply_markup=kb.main)
 
 @router.message(Command('help'))
@@ -49,7 +52,7 @@ async def txt_upload(callback: CallbackQuery):
     text = (
         "🕒 <b>Новий запис для CaptureTime</b>\n\n"
         "Надішли свої дані у наступному форматі:\n"
-        "<code>dd.mm.yyyy xx:xx \nSong \nAuthor</code>\n\n"
+        "<code>dd.mm.yy xx:xx \nSong \nAuthor</code>\n\n"
         "<i>💡 Примітка: назва пісні та автор не є обов'язковими.</i>"
     )
     await callback.message.edit_text(text, parse_mode=ParseMode.HTML)
@@ -97,12 +100,20 @@ async def Upl_first(message: Message, state: FSMContext):
 
 @router.message(st.Upl.confirmation)
 async def Upl_second(message: Message, state: FSMContext):
-    await state.update_data(confirmation=message.text)
-    data = await state.get_data()
-    if data["confirmation"].lower() == 'yes':
+    
+    if message.text.lower() == 'yes':
+        data = await state.get_data()
+        parts = data["day_data"].split('\n')
+
+        captured_at = parts[0]
+        music_title = parts[1] if len(parts) > 1 else None
+        author = parts[2] if len(parts) > 2 else None
+
+        await db.add_capture(message.from_user.id, captured_at, music_title, author)
+
         await message.answer(f'Thanks! We have saved it')
-        await state.clear()
     else: 
         await message.answer(f"Ok, try again. We haven't saved your data")
-        await state.clear()
+
+    await state.clear()
     
