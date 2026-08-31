@@ -48,11 +48,20 @@ async def add_capture(tg_id: int, captured_at: str, music_title: str, author: st
 
     print(f"New capture is created for tg_id {tg_id}")
 
-async def user_captures_list(tg_id: int) -> list[tuple[str, str | None, str | None]]:
+async def user_captures_list(tg_id: int) -> list[tuple[int, str, str | None, str | None]]:
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute("""
-            SELECT captured_at, music_title, author 
+            SELECT id, captured_at, music_title, author 
             FROM capture 
-            WHERE user_id = (SELECT id FROM users WHERE tg_id = ?)
+            WHERE user_id = (SELECT id FROM users WHERE tg_id = ?);
         """, (tg_id,)) as cursor:
+            return await cursor.fetchall()
+
+async def get_entry(tg_id: int, entry_number: int) -> list[tuple[int, str, str | None, str | None]]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("""
+            SELECT id, captured_at, music_title, author
+            FROM capture
+            WHERE user_id = (SELECT id FROM users WHERE tg_id = ?) and id = ?;
+        """, (tg_id, entry_number)) as cursor:
             return await cursor.fetchall()

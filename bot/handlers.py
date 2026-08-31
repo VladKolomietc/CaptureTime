@@ -33,21 +33,26 @@ async def download_data(message: Message):
     await message.answer('Choose a format of data to download', reply_markup=kb.downl)
 
 @router.callback_query(F.data == 'listform')
-async def listform(callback: CallbackQuery):
+async def listform(callback: CallbackQuery, state: FSMContext):
     await callback.answer('')
-    user_id = callback.from_user.id
-    records = await db.user_captures_list(user_id)
 
-    if not records:
-        text = "You don't have any records so far"
-    else:
-        text = "<b>Your records:</b>\n\n"
-        for idx, (captured_at, title, author) in enumerate(records, start=1):
-            song_info = f"{title} - {author}" if title and author else "Without music"
-            text += f"{idx}. {captured_at} | {song_info}\n"
+    text = await generate_records_text(callback.from_user.id, is_edit_mode=False)        
     await callback.message.edit_text(text, parse_mode=ParseMode.HTML)
 
-
+async def generate_records_text(user_id: int, is_edit_mode: bool) -> str:
+    records = await db.user_captures_list(user_id)
+ 
+    text = "<b>Select record ID to change/delete:</b>\n\n" if is_edit_mode else "<b>Your records:</b>\n\n"
+            
+    for idx, (id, captured_at, title, author) in enumerate(records, start=1):
+        song_info = f"{title} - {author}" if title and author else "Without music"
+        if is_edit_mode:
+            text += f"ID:{id} | {captured_at} | {song_info}\n"
+        else:
+            text += f"{idx}. {captured_at} | {song_info}\n"
+    if is_edit_mode:
+        text += "\n<i>Enter the actual ID:</i>"
+    return text
 
 # UPLOAD BLOCK 
 
@@ -60,10 +65,10 @@ async def upload_data(message: Message, state: FSMContext):
 async def txt_upload(callback: CallbackQuery):
     await callback.answer('')
     text = (
-        "🕒 <b>Новий запис для CaptureTime</b>\n\n"
-        "Надішли свої дані у наступному форматі:\n"
-        "<code>dd.mm.yy xx:xx \nSong \nAuthor</code>\n\n"
-        "<i>💡 Примітка: назва пісні та автор не є обов'язковими.</i>"
+        "🕒 <b>New entry for CaptureTime</b>\n\n"
+        "Submit your data in the following format:\n"
+        "<code>dd.mm.yyyy xx:xx \nSong \nAuthor</code>\n\n"
+        "<i>💡Note: song title and artist are optional.</i>"
     )
     await callback.message.edit_text(text, parse_mode=ParseMode.HTML)
     
@@ -85,10 +90,10 @@ def day_data_validation(parts: list) -> bool:
     date_string = parts[0].strip()
 
     try:
-        datetime.strptime(date_string, "%d.%m.%y %H:%M")
+        datetime.strptime(date_string, "%d.%m.%Y %H:%M")
     except ValueError:
         try:
-                datetime.strptime(date_string, "%d.%m.%Y %H:%M")
+                datetime.strptime(date_string, "%d.%m.%y %H:%M")
         except ValueError:
             return False
 
@@ -99,11 +104,11 @@ def day_data_validation(parts: list) -> bool:
 async def Upl_first(message: Message, state: FSMContext):
     parts = message.text.split('\n')
     text = (
-    "Ви ввели невірні дані. Спробуйте знову, слідуючи такому формату -\n\n"
-    "<code>dd.mm.yy xx:xx\n"
+    "You have entered incorrect data. Please try again following this format -\n\n"
+    "<code>dd.mm.yyyy xx:xx\n"
     "Song\n"
     "Author</code>\n\n"
-    "Автор та назва пісні необов'язкові."
+    "The author and title of the song are optional."
     )   
     if not day_data_validation(parts):
         await message.answer(text, parse_mode=ParseMode.HTML)
@@ -131,4 +136,27 @@ async def Upl_second(message: Message, state: FSMContext):
         await message.answer(f"Ok, try again. We haven't saved your data")
 
     await state.clear()
+    
+# CHANGE/DELETE BLOCK 
+
+@router.message(F.text == "Change/Delete")
+async def start_change_flow(message: Message, state: FSMContext):
+    await state.set_state(st.ChangeData.select_number)
+
+    text = await generate_records_text(message.from_user.id, is_edit_mode=True)
+    await message.answer(text, parse_mode=ParseMode.HTML)
+
+@router.message(st.ChangeData.select_number)
+async def choose_action(message: Message, state: FSMContext):
+    songID = message.text
+    await state.update_data(select_number=songID)
+    entry = await db.get_entry(message.from_user.id, songID)
+    rec_id, captured_at, title, author = entry[0]
+
+    song_info = f"{title} - {author}" if title and author else "Without music"
+    entry_text = f"ID:{rec_id} | {captured_at} | {song_info}"
+
+    text = f"<b>Select the operation you want to apply to this entry:</b>\n{entry_text}"
+    await message.reply(text, parse_mode=ParseMode.HTML, reply_markup=kb.chng_or_del)
+
     
