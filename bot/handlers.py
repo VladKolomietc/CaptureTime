@@ -148,15 +148,38 @@ async def start_change_flow(message: Message, state: FSMContext):
 
 @router.message(st.ChangeData.select_number)
 async def choose_action(message: Message, state: FSMContext):
-    songID = message.text
-    await state.update_data(select_number=songID)
+    songID_text = message.text
+    if not songID_text.isdigit():
+        message.reply("Entered ID isn't valid. Please enter a number.")
+        return
+
+    songID = int(songID_text)
+
     entry = await db.get_entry(message.from_user.id, songID)
+    if not entry:
+        await message.reply("Entry with this ID not found.")
+        return 
+
+    await state.update_data(select_number=songID)
     rec_id, captured_at, title, author = entry[0]
 
     song_info = f"{title} - {author}" if title and author else "Without music"
     entry_text = f"ID:{rec_id} | {captured_at} | {song_info}"
 
     text = f"<b>Select the operation you want to apply to this entry:</b>\n{entry_text}"
+    await state.set_state(st.ChangeData.action)
     await message.reply(text, parse_mode=ParseMode.HTML, reply_markup=kb.chng_or_del)
+
+@router.callback_query(st.ChangeData.action)
+async def change_del(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+
+    data = await state.get_data()
+    songID = data.get("select_number")
+
+    if callback.data == "delete":
+        await db.delete_entry(songID)
+    elif callback.data == "change":
+        pass
 
     

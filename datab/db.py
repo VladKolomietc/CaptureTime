@@ -65,3 +65,4 @@ async def get_entry(tg_id: int, entry_number: int) -> list[tuple[int, str, str |
             WHERE user_id = (SELECT id FROM users WHERE tg_id = ?) and id = ?;
         """, (tg_id, entry_number)) as cursor:
             return await cursor.fetchall()
+
