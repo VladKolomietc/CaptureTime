@@ -18,6 +18,7 @@ async def create_database():
                 id INTEGER PRIMARY KEY,
                 user_id INTEGER NOT NULL,
                 captured_at TEXT NOT NULL,
+                focus_time INTEGER NOT NULL,
                 music_title TEXT,
                 author TEXT, 
                 FOREIGN KEY (user_id) REFERENCES users (id) 
@@ -38,12 +39,12 @@ async def add_user(tg_id: int, user_name: str):
 
     print(f"{user_name} with tg id {tg_id} was inserted")
     
-async def add_capture(tg_id: int, captured_at: str, music_title: str, author: str):
+async def add_capture(tg_id: int, captured_at: str, focus_time: int, music_title: str, author: str):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
-            INSERT INTO capture (user_id, captured_at, music_title, author)
-            VALUES ((SELECT id FROM users WHERE tg_id = ?), ?, ?, ?);
-        """, (tg_id, captured_at, music_title, author))
+            INSERT INTO capture (user_id, captured_at, focus_time, music_title, author)
+            VALUES ((SELECT id FROM users WHERE tg_id = ?), ?, ?, ?, ?);
+        """, (tg_id, captured_at, focus_time, music_title, author))
         await db.commit()
 
     print(f"New capture is created for tg_id {tg_id}")
@@ -51,7 +52,7 @@ async def add_capture(tg_id: int, captured_at: str, music_title: str, author: st
 async def user_captures_list(tg_id: int) -> list[tuple[int, str, str | None, str | None]]:
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute("""
-            SELECT id, captured_at, music_title, author 
+            SELECT id, captured_at, focus_time, music_title, author 
             FROM capture 
             WHERE user_id = (SELECT id FROM users WHERE tg_id = ?);
         """, (tg_id,)) as cursor:
@@ -60,7 +61,7 @@ async def user_captures_list(tg_id: int) -> list[tuple[int, str, str | None, str
 async def get_entry(tg_id: int, entry_number: int) -> list[tuple[int, str, str | None, str | None]]:
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute("""
-            SELECT id, captured_at, music_title, author
+            SELECT id, captured_at, focus_time, music_title, author
             FROM capture
             WHERE user_id = (SELECT id FROM users WHERE tg_id = ?) and id = ?;
         """, (tg_id, entry_number)) as cursor:

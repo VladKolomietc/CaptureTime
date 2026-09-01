@@ -24,6 +24,44 @@ async def get_help(message: Message):
 async def get_photo(message: Message):
     await message.reply(f'ID photo: {message.photo[-1].file_id}')
 
+# COMMON FUNCTIONS 
+
+def day_data_validation(parts: list) -> bool:
+    if len(parts) > 3:
+        return False
+
+    date_string = parts[0].strip()
+
+    try:
+        datetime.strptime(date_string, "%d.%m.%Y %H:%M")
+    except ValueError:
+        try:
+                datetime.strptime(date_string, "%d.%m.%y %H:%M")
+        except ValueError:
+            return False
+
+    return True
+
+def time_display(focus_time: int) -> str:
+    hours = focus_time // 60
+    minutes = focus_time % 60 
+    return f"{hours:02d}:{minutes:02d}"
+
+async def generate_records_text(user_id: int, is_edit_mode: bool) -> str:
+    records = await db.user_captures_list(user_id)
+    
+    text = "<b>Select record ID to change/delete:</b>\n\n" if is_edit_mode else "<b>Your records:</b>\n\n"
+            
+    for idx, (id, captured_at, focus_time, title, author) in enumerate(records, start=1):
+        focus_parsed = time_display(focus_time)
+        song_info = f"{title} - {author}" if title and author else "Without music"
+        if is_edit_mode:
+            text += f"ID:{id} | {captured_at} - {focus_parsed} | {song_info}\n"
+        else:
+            text += f"{idx}. {captured_at} - {focus_parsed} | {song_info}\n"
+    if is_edit_mode:
+        text += "\n<i>Enter the actual ID:</i>"
+    return text
 
 
 # DOWNLOAD BLOCK 
@@ -38,21 +76,6 @@ async def listform(callback: CallbackQuery, state: FSMContext):
 
     text = await generate_records_text(callback.from_user.id, is_edit_mode=False)        
     await callback.message.edit_text(text, parse_mode=ParseMode.HTML)
-
-async def generate_records_text(user_id: int, is_edit_mode: bool) -> str:
-    records = await db.user_captures_list(user_id)
- 
-    text = "<b>Select record ID to change/delete:</b>\n\n" if is_edit_mode else "<b>Your records:</b>\n\n"
-            
-    for idx, (id, captured_at, title, author) in enumerate(records, start=1):
-        song_info = f"{title} - {author}" if title and author else "Without music"
-        if is_edit_mode:
-            text += f"ID:{id} | {captured_at} | {song_info}\n"
-        else:
-            text += f"{idx}. {captured_at} | {song_info}\n"
-    if is_edit_mode:
-        text += "\n<i>Enter the actual ID:</i>"
-    return text
 
 # UPLOAD BLOCK 
 
@@ -81,24 +104,7 @@ async def img_upload(callback: CallbackQuery):
     await callback.message.answer_photo(
         photo=reference,
         caption='Send photo like this one:'
-    )
-
-def day_data_validation(parts: list) -> bool:
-    if len(parts) > 3:
-        return False
-
-    date_string = parts[0].strip()
-
-    try:
-        datetime.strptime(date_string, "%d.%m.%Y %H:%M")
-    except ValueError:
-        try:
-                datetime.strptime(date_string, "%d.%m.%y %H:%M")
-        except ValueError:
-            return False
-
-    return True
-    
+    )    
 
 @router.message(st.Upl.day_data)
 async def Upl_first(message: Message, state: FSMContext):
@@ -125,11 +131,14 @@ async def Upl_second(message: Message, state: FSMContext):
         data = await state.get_data()
         parts = data["day_data"].split('\n')
 
-        captured_at = parts[0].strip()
+        captured_at, time_part = (parts[0].strip()).split(" ")
+        hours, minutes = map(int, time_part.split(":"))
+        focus_time = hours * 60 + minutes
+
         music_title = parts[1].strip() if len(parts) > 1 else None
         author = parts[2].strip() if len(parts) > 2 else None
 
-        await db.add_capture(message.from_user.id, captured_at, music_title, author)
+        await db.add_capture(message.from_user.id, captured_at, focus_time, music_title, author)
 
         await message.answer(f'Thanks! We have saved it')
     else: 
@@ -161,10 +170,11 @@ async def choose_action(message: Message, state: FSMContext):
         return 
 
     await state.update_data(select_number=songID)
-    rec_id, captured_at, title, author = entry[0]
+    rec_id, captured_at, focus_time, title, author = entry[0]
 
+    focus_parsed = time_display(focus_time)
     song_info = f"{title} - {author}" if title and author else "Without music"
-    entry_text = f"ID:{rec_id} | {captured_at} | {song_info}"
+    entry_text = f"ID:{rec_id} | {captured_at} - {focus_parsed}| {song_info}"
 
     text = f"<b>Select the operation you want to apply to this entry:</b>\n{entry_text}"
     await state.set_state(st.ChangeData.action)
