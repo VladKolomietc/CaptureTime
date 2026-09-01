@@ -7,6 +7,7 @@ import bot.states as st
 from aiogram.enums import ParseMode
 from datetime import datetime
 from datab import db
+from utils.plotter import generate_activity_plot
 
 router = Router()
 
@@ -77,6 +78,25 @@ async def listform(callback: CallbackQuery, state: FSMContext):
     text = await generate_records_text(callback.from_user.id, is_edit_mode=False)        
     await callback.message.edit_text(text, parse_mode=ParseMode.HTML)
 
+@router.callback_query(F.data == 'plotform')
+async def send_plot(callback: CallbackQuery):
+    await callback.answer("Genereting plot... 📊")
+    records = await db.user_captures_list(callback.from_user.id)
+
+    if not records:
+        await callback.message.edit_text("You don't have any records to plot yet.")
+        return 
+    
+    photo = generate_activity_plot(records)
+
+    await callback.message.delete()
+    await callback.message.answer_photo(
+        photo=photo,
+        caption="<b>Your Focus Analytics</b> 📈",
+        parse_mode=ParseMode.HTML
+    )
+    
+    
 # UPLOAD BLOCK 
 
 @router.message(F.text == 'Upload')

@@ -8,7 +8,8 @@ main = ReplyKeyboardMarkup(keyboard=[
 ], resize_keyboard=True, input_field_placeholder='Select a button')
 
 downl = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text='List', callback_data='listform')]
+    [InlineKeyboardButton(text='List', callback_data='listform')],
+    [InlineKeyboardButton(text='Plot', callback_data='plotform')]
 ])
 
 uplo = InlineKeyboardMarkup(inline_keyboard=[
@@ -20,3 +21,4 @@ chng_or_del = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text='Change', callback_data='change'), 
      InlineKeyboardButton(text='Delete', callback_data='delete')]
 ])
+
