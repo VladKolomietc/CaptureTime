@@ -66,3 +66,10 @@ async def get_entry(tg_id: int, entry_number: int) -> list[tuple[int, str, str |
         """, (tg_id, entry_number)) as cursor:
             return await cursor.fetchall()
 
+async def delete_entry(entry_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+        DELETE FROM capture
+        WHERE id = ?; 
+    """, (entry_id,))
+        await db.commit()
