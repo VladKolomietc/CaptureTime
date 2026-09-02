@@ -2,11 +2,16 @@ import asyncio
 import logging
 from aiogram import Bot, Dispatcher
 from datab import db 
-from bot.config import TOKEN
+import os
+from dotenv import load_dotenv
 from bot.handlers import router
 
 async def main():
-    bot = Bot(token=TOKEN)
+    load_dotenv() 
+    BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+    print(f"Ключ бота завантажено: {bool(BOT_TOKEN)}")
+    bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher()
     
     dp.include_router(router)

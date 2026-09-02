@@ -1,4 +1,4 @@
-from aiogram import Router, F 
+from aiogram import Router, F, Bot
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery, FSInputFile
 import bot.keyboards as kb
@@ -8,6 +8,10 @@ from aiogram.enums import ParseMode
 from datetime import datetime
 from datab import db
 from utils.plotter import generate_activity_plot
+import io
+import PIL.Image
+import asyncio
+from utils.ocr import extract_data_from_img
 
 router = Router()
 
@@ -22,8 +26,37 @@ async def get_help(message: Message):
     await message.answer('An automated Telegram bot that tracks focus time by parsing iOS lock screen screenshots. It extracts timer data and currently playing music, providing visual analytics and productivity statistics')
 
 @router.message(F.photo)
-async def get_photo(message: Message):
-    await message.reply(f'ID photo: {message.photo[-1].file_id}')
+async def process_screenshot(message: Message, bot: Bot):
+    processing_msg = await message.answer("👀 Аналізую скріншот...")
+    
+    # Беремо останній елемент масиву photo (найкраща якість)
+    photo = message.photo[-1]
+    
+    # Завантажуємо фото в оперативну пам'ять
+    photo_bytes = io.BytesIO()
+    await bot.download(photo, destination=photo_bytes)
+    photo_bytes.seek(0)
+    
+    # Стискаємо зображення
+    img = PIL.Image.open(photo_bytes)
+    img.thumbnail((800, 800))
+    
+    try:
+        # Передаємо синхронну функцію в окремий потік, щоб не блокувати aiogram
+        data = await asyncio.to_thread(extract_data_from_img, img)
+        
+        text_result = (
+            f"✅ **Розпізнано!**\n"
+            f"📅 Дата: {data['captured_at']}\n"
+            f"⏱ Фокус: {data['focus_time']}\n"
+            f"🎵 Трек: {data['music_title']} - {data['author']}"
+        )
+        await processing_msg.edit_text(text_result)
+        
+        # Далі тут буде виклик функції для запису в БД
+        
+    except Exception as e:
+        await processing_msg.edit_text(f"❌ Помилка розпізнавання: {e}")
 
 # COMMON FUNCTIONS 
 
