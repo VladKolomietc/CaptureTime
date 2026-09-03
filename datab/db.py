@@ -77,3 +77,13 @@ async def delete_entry(entry_id: int):
         WHERE id = ?; 
     """, (entry_id,))
         await db.commit()
+
+async def update_entry(entry_id, column_name: str, new_value):
+    async with aiosqlite.connect(DB_PATH) as db: 
+        query = f"""
+            UPDATE capture
+            SET {column_name} = ?
+            WHERE id = ?;
+        """
+        await db.execute(query, (new_value, entry_id))
+        await db.commit()

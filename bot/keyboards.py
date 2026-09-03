@@ -26,3 +26,8 @@ save_or_cnl = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text='💾Save', callback_data='save'),
      InlineKeyboardButton(text='❌Cancel', callback_data='cancel')]
 ])
+
+change_part = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text='Date', callback_data='edit_date'), InlineKeyboardButton(text='Focus time', callback_data='edit_focus')],
+    [InlineKeyboardButton(text='Title', callback_data='edit_title'), InlineKeyboardButton(text='Author', callback_data='edit_author')]
+])

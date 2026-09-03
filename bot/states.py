@@ -7,6 +7,8 @@ class Upl(StatesGroup):
 class ChangeData(StatesGroup):
     select_number = State()
     action = State()
+    choose_field = State()
+    enter_new_values = State()
 
 class CaptureProcess(StatesGroup):
     waiting_for_save = State()

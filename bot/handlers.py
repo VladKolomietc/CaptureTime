@@ -12,6 +12,7 @@ import io
 import PIL.Image
 import asyncio
 from utils.ocr import extract_data_from_img
+import re
 
 router = Router()
 
@@ -27,16 +28,34 @@ async def cmd_start(message: Message):
 async def get_help(message: Message):
     await message.answer('An automated Telegram bot that tracks focus time by parsing iOS lock screen screenshots. It extracts timer data and currently playing music, providing visual analytics and productivity statistics')
 
-@router.message(F.photo)
+@router.message(F.photo | F.document)
 async def process_screenshot(message: Message, bot: Bot, state: FSMContext):
-    processing_msg = await message.answer("👀 Аналізую скріншот...")
-    
-    # Беремо останній елемент масиву photo (найкраща якість)
-    photo = message.photo[-1]
-    
+    processing_msg = await message.answer("👀 Analyzing the screenshot...")
+
+    exact_date = None 
+    date_pattern = r"(20\d{2}[-.]\d{2}[-.]\d{2}|\d{2}[-.]\d{2}[-.]20\d{2})"
+
+    if message.caption:
+        match = re.search(date_pattern, message.caption)
+        if match: 
+            exact_date = match.group(1)
+
+    if not exact_date and message.document and message.document.file_name:
+        match = re.search(date_pattern, message.document.file_name)
+        if match: 
+            exact_date = match.group(1)
+
     # Завантажуємо фото в оперативну пам'ять
     photo_bytes = io.BytesIO()
-    await bot.download(photo, destination=photo_bytes)
+    if message.photo:
+        file = message.photo[-1]
+        await bot.download(file, destination=photo_bytes)
+    elif message.document and message.document.mime_type.startswith('image/'):
+        file = message.document
+        await bot.download(file, destination=photo_bytes)
+    else:
+        await processing_msg.edit_text("❌ The sent file is not an image.")
+        return
     photo_bytes.seek(0)
     
     # Стискаємо зображення
@@ -46,6 +65,17 @@ async def process_screenshot(message: Message, bot: Bot, state: FSMContext):
     try:
         # Передаємо синхронну функцію в окремий потік, щоб не блокувати aiogram
         data = await asyncio.to_thread(extract_data_from_img, img)
+
+        if exact_date:
+                clean_date = exact_date.replace('-', '.')
+                parts = clean_date.split('.')
+        
+                if len(parts[0]) == 4:
+                    formatted_exact_date = f"{parts[2]}.{parts[1]}.{parts[0]}"
+                else:
+                    formatted_exact_date = f"{parts[0]}.{parts[1]}.{parts[2]}"   
+                data['captured_at'] = formatted_exact_date
+        
         await state.update_data(
             captured_at=data['captured_at'],
             focus_time=data['focus_time'],
@@ -55,16 +85,16 @@ async def process_screenshot(message: Message, bot: Bot, state: FSMContext):
         await state.set_state(st.CaptureProcess.waiting_for_save)
 
         text_result = (
-            f"✅ - Розпізнано! -\n"
-            f"📅 Дата: {data['captured_at']}\n"
-            f"⏱ Фокус: {data['focus_time']}\n"
-            f"🎵 Трек: {data['music_title']} - {data['author']}"
+            f"✅ - Recognized! -\n"
+            f"📅 Date: {data['captured_at']}\n"
+            f"⏱ Focus: {data['focus_time']}\n"
+            f"🎵 Music: {data['music_title']} - {data['author']}"
         )
         
         await processing_msg.edit_text(text_result, reply_markup=kb.save_or_cnl)        
         
     except Exception as e:
-        await processing_msg.edit_text(f"❌ Помилка розпізнавання: {e}")
+        await processing_msg.edit_text(f"❌ Recognition error: {e}")
 
 @router.callback_query(F.data == 'save', st.CaptureProcess.waiting_for_save)
 async def save_from_img(callback: CallbackQuery, state: FSMContext):
@@ -280,5 +310,49 @@ async def change_del(callback: CallbackQuery, state: FSMContext):
         await state.clear()
         await callback.message.edit_text("<b>Entry has been deleted</b>", parse_mode=ParseMode.HTML)
     elif callback.data == "change":
-        await callback.answer("⏳The feature is under development. ", show_alert=True)
-        await state.clear()
+        await callback.answer()
+        await state.set_state(st.ChangeData.choose_field)
+        await callback.message.edit_text("<b>Select what you want to change </b>", reply_markup=kb.change_part, parse_mode=ParseMode.HTML)
+
+@router.callback_query(F.data.startswith("edit_"), st.ChangeData.choose_field)
+async def choose_edit_field(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    
+    field_map = {
+        "edit_date": ("date (fromat DD.MM.YYYY)", "captured_at"),
+        "edit_time": ("focus time (format HH:MM)", "focus_time"),
+        "edit_title": ("music title", "music_title"),
+        "edit_author": ("author", "author")
+    }
+    
+    prompt_text, db_column = field_map[callback.data]
+    
+    await state.update_data(edit_column=db_column)
+    await state.set_state(st.ChangeData.enter_new_values)
+    
+    await callback.message.edit_text(
+        f"Write a new value for: <b>{prompt_text}</b>", 
+        parse_mode=ParseMode.HTML
+    )
+
+@router.message(st.ChangeData.enter_new_values)
+async def process_new_value(message: Message, state: FSMContext):
+    data = await state.get_data()
+    songID = data.get("select_number")
+    db_column = data.get("edit_column")
+    new_value = message.text.strip()
+
+    if db_column == "captured_at":
+        if not re.match(r"^\d{2}\.\d{2}\.\d{4}$", new_value):
+            await message.answer("❌ Incorrect format! Write in DD.MM.YYYY format:")
+            return
+            
+    elif db_column == "focus_time":
+        if not re.match(r"^\d{1,2}:\d{2}$", new_value):
+            await message.answer("❌ Incorrect format! Write in XX:XX format:")
+            return
+
+    await db.update_entry(songID, db_column, new_value)
+    
+    await message.answer("✅ <b>The entry was successfully updated!</b>", parse_mode=ParseMode.HTML)
+    await state.clear()
