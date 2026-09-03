@@ -15,6 +15,8 @@ from utils.ocr import extract_data_from_img
 
 router = Router()
 
+# SAVE FROM IMAGE 
+
 @router.message(CommandStart())
 async def cmd_start(message: Message):
     await db.add_user(message.from_user.id, message.from_user.username)
@@ -26,7 +28,7 @@ async def get_help(message: Message):
     await message.answer('An automated Telegram bot that tracks focus time by parsing iOS lock screen screenshots. It extracts timer data and currently playing music, providing visual analytics and productivity statistics')
 
 @router.message(F.photo)
-async def process_screenshot(message: Message, bot: Bot):
+async def process_screenshot(message: Message, bot: Bot, state: FSMContext):
     processing_msg = await message.answer("👀 Аналізую скріншот...")
     
     # Беремо останній елемент масиву photo (найкраща якість)
@@ -44,19 +46,51 @@ async def process_screenshot(message: Message, bot: Bot):
     try:
         # Передаємо синхронну функцію в окремий потік, щоб не блокувати aiogram
         data = await asyncio.to_thread(extract_data_from_img, img)
-        
+        await state.update_data(
+            captured_at=data['captured_at'],
+            focus_time=data['focus_time'],
+            music_title=data['music_title'],
+            author=data['author']
+        )
+        await state.set_state(st.CaptureProcess.waiting_for_save)
+
         text_result = (
-            f"✅ **Розпізнано!**\n"
+            f"✅ - Розпізнано! -\n"
             f"📅 Дата: {data['captured_at']}\n"
             f"⏱ Фокус: {data['focus_time']}\n"
             f"🎵 Трек: {data['music_title']} - {data['author']}"
         )
-        await processing_msg.edit_text(text_result)
         
-        # Далі тут буде виклик функції для запису в БД
+        await processing_msg.edit_text(text_result, reply_markup=kb.save_or_cnl)        
         
     except Exception as e:
         await processing_msg.edit_text(f"❌ Помилка розпізнавання: {e}")
+
+@router.callback_query(F.data == 'save', st.CaptureProcess.waiting_for_save)
+async def save_from_img(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    user_data = await state.get_data()
+    await db.add_capture(
+        callback.from_user.id, 
+        user_data['captured_at'], 
+        user_data['focus_time'], 
+        user_data['music_title'], 
+        user_data['author']
+    )
+    await callback.message.edit_text(
+        f"{callback.message.text}\n\n💾 *Data successfully saved!*",
+        parse_mode="Markdown"
+    )
+    await state.clear()
+
+@router.callback_query(F.data == 'cancel', st.CaptureProcess.waiting_for_save)
+async def cancel_save(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await callback.message.edit_text(
+        f"{callback.message.text}\n\n❌ *The save was cancelled.*",
+        parse_mode="Markdown"
+    )
+    await state.clear()
 
 # COMMON FUNCTIONS 
 
@@ -101,7 +135,8 @@ async def generate_records_text(user_id: int, is_edit_mode: bool) -> str:
 # DOWNLOAD BLOCK 
 
 @router.message(F.text == 'Download')
-async def download_data(message: Message):
+async def download_data(message: Message, state: FSMContext):
+    await state.clear()
     await message.answer('Choose a format of data to download', reply_markup=kb.downl)
 
 @router.callback_query(F.data == 'listform')
@@ -134,12 +169,13 @@ async def send_plot(callback: CallbackQuery):
 
 @router.message(F.text == 'Upload')
 async def upload_data(message: Message, state: FSMContext):
-    await state.set_state(st.Upl.day_data)
+    await state.clear()
     await message.answer('Choose a format of data to upload', reply_markup=kb.uplo)
 
 @router.callback_query(F.data == 'txt_upload')
-async def txt_upload(callback: CallbackQuery):
+async def txt_upload(callback: CallbackQuery, state: FSMContext):
     await callback.answer('')
+    await state.set_state(st.Upl.day_data)
     text = (
         "🕒 <b>New entry for CaptureTime</b>\n\n"
         "Submit your data in the following format:\n"
@@ -161,6 +197,7 @@ async def img_upload(callback: CallbackQuery):
 
 @router.message(st.Upl.day_data)
 async def Upl_first(message: Message, state: FSMContext):
+    if not message.text: return
     parts = message.text.split('\n')
     text = (
     "You have entered incorrect data. Please try again following this format -\n\n"
@@ -185,13 +222,11 @@ async def Upl_second(message: Message, state: FSMContext):
         parts = data["day_data"].split('\n')
 
         captured_at, time_part = (parts[0].strip()).split(" ")
-        hours, minutes = map(int, time_part.split(":"))
-        focus_time = hours * 60 + minutes
-
+        
         music_title = parts[1].strip() if len(parts) > 1 else None
         author = parts[2].strip() if len(parts) > 2 else None
 
-        await db.add_capture(message.from_user.id, captured_at, focus_time, music_title, author)
+        await db.add_capture(message.from_user.id, captured_at, time_part, music_title, author)
 
         await message.answer(f'Thanks! We have saved it')
     else: 
@@ -203,6 +238,7 @@ async def Upl_second(message: Message, state: FSMContext):
 
 @router.message(F.text == "Change/Delete")
 async def start_change_flow(message: Message, state: FSMContext):
+    await state.clear()
     await state.set_state(st.ChangeData.select_number)
 
     text = await generate_records_text(message.from_user.id, is_edit_mode=True)
@@ -246,4 +282,3 @@ async def change_del(callback: CallbackQuery, state: FSMContext):
     elif callback.data == "change":
         await callback.answer("⏳The feature is under development. ", show_alert=True)
         await state.clear()
-    

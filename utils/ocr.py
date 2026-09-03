@@ -6,7 +6,7 @@ from google.genai import types
 def extract_data_from_img(img):
     client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-    promt = """
+    prompt = """
     Analyze this lock screen screenshot. Extract the time tracking data and the currently playing music.
     Return ONLY a valid JSON object.
     {
@@ -18,8 +18,8 @@ def extract_data_from_img(img):
     """
 
     response = client.models.generate_content(
-        model='gemini-3.6-flash',
-        contents=[promt, img],
+        model='gemini-3.7-flash',
+        contents=[prompt, img],
         config=types.GenerateContentConfig(response_mime_type="application/json")
     )
 

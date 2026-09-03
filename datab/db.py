@@ -39,7 +39,10 @@ async def add_user(tg_id: int, user_name: str):
 
     print(f"{user_name} with tg id {tg_id} was inserted")
     
-async def add_capture(tg_id: int, captured_at: str, focus_time: int, music_title: str, author: str):
+async def add_capture(tg_id: int, captured_at: str, time_part: int, music_title: str, author: str):
+    hours, minutes = map(int, time_part.split(":"))
+    focus_time = hours * 60 + minutes
+
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
             INSERT INTO capture (user_id, captured_at, focus_time, music_title, author)

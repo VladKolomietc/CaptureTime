@@ -22,3 +22,7 @@ chng_or_del = InlineKeyboardMarkup(inline_keyboard=[
      InlineKeyboardButton(text='Delete', callback_data='delete')]
 ])
 
+save_or_cnl = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text='💾Save', callback_data='save'),
+     InlineKeyboardButton(text='❌Cancel', callback_data='cancel')]
+])
