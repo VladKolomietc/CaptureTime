@@ -57,7 +57,8 @@ async def user_captures_list(tg_id: int) -> list[tuple[int, str, str | None, str
         async with db.execute("""
             SELECT id, captured_at, focus_time, music_title, author 
             FROM capture 
-            WHERE user_id = (SELECT id FROM users WHERE tg_id = ?);
+            WHERE user_id = (SELECT id FROM users WHERE tg_id = ?)
+            ORDER BY captured_at;
         """, (tg_id,)) as cursor:
             return await cursor.fetchall()
 

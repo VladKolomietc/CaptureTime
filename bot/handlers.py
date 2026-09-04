@@ -28,6 +28,16 @@ async def cmd_start(message: Message):
 async def get_help(message: Message):
     await message.answer('An automated Telegram bot that tracks focus time by parsing iOS lock screen screenshots. It extracts timer data and currently playing music, providing visual analytics and productivity statistics')
 
+@router.message(Command("exit"))
+@router.message(F.text.lower() == "exit")
+async def global_cancel_handler(message: Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state is None:
+        return 
+        
+    await state.clear()
+    await message.answer("❌ Action canceled. You are back to the main menu.", reply_markup=kb.main)
+
 @router.message(F.photo | F.document)
 async def process_screenshot(message: Message, bot: Bot, state: FSMContext):
     processing_msg = await message.answer("👀 Analyzing the screenshot...")
@@ -111,7 +121,7 @@ async def save_from_img(callback: CallbackQuery, state: FSMContext):
         f"{callback.message.text}\n\n💾 *Data successfully saved!*",
         parse_mode="Markdown"
     )
-    await state.clear()
+    await state.set_state(st.CaptureProcess.waiting_for_save)
 
 @router.callback_query(F.data == 'cancel', st.CaptureProcess.waiting_for_save)
 async def cancel_save(callback: CallbackQuery, state: FSMContext):
@@ -120,7 +130,7 @@ async def cancel_save(callback: CallbackQuery, state: FSMContext):
         f"{callback.message.text}\n\n❌ *The save was cancelled.*",
         parse_mode="Markdown"
     )
-    await state.clear()
+    await state.set_state(st.CaptureProcess.waiting_for_save)
 
 # COMMON FUNCTIONS 
 
@@ -205,14 +215,14 @@ async def upload_data(message: Message, state: FSMContext):
 @router.callback_query(F.data == 'txt_upload')
 async def txt_upload(callback: CallbackQuery, state: FSMContext):
     await callback.answer('')
-    await state.set_state(st.Upl.day_data)
+    await state.set_state(st.CaptureProcess.waiting_for_save)
     text = (
         "🕒 <b>New entry for CaptureTime</b>\n\n"
         "Submit your data in the following format:\n"
         "<code>dd.mm.yyyy xx:xx \nSong \nAuthor</code>\n\n"
         "<i>💡Note: song title and artist are optional.</i>"
     )
-    await callback.message.edit_text(text, parse_mode=ParseMode.HTML)
+    await callback.message.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=kb.exit_from_state)
     
 @router.callback_query(F.data == 'img_upload')
 async def img_upload(callback: CallbackQuery):
@@ -225,7 +235,7 @@ async def img_upload(callback: CallbackQuery):
         caption='Send photo like this one:'
     )    
 
-@router.message(st.Upl.day_data)
+@router.message(st.CaptureProcess.waiting_for_save)
 async def Upl_first(message: Message, state: FSMContext):
     if not message.text: return
     parts = message.text.split('\n')
@@ -239,30 +249,20 @@ async def Upl_first(message: Message, state: FSMContext):
     if not day_data_validation(parts):
         await message.answer(text, parse_mode=ParseMode.HTML)
         return 
-
-    await state.update_data(day_data=message.text)
-    await state.set_state(st.Upl.confirmation)
-    await message.answer(f'Are you sure that your data is:\n{message.text}?')
-
-@router.message(st.Upl.confirmation)
-async def Upl_second(message: Message, state: FSMContext):
     
-    if message.text.lower() == 'yes':
-        data = await state.get_data()
-        parts = data["day_data"].split('\n')
-
-        captured_at, time_part = (parts[0].strip()).split(" ")
-        
-        music_title = parts[1].strip() if len(parts) > 1 else None
-        author = parts[2].strip() if len(parts) > 2 else None
-
-        await db.add_capture(message.from_user.id, captured_at, time_part, music_title, author)
-
-        await message.answer(f'Thanks! We have saved it')
-    else: 
-        await message.answer(f"Ok, try again. We haven't saved your data")
-
-    await state.clear()
+    captured_at, focus_time = (parts[0].strip()).split(" ")
+            
+    music_title = parts[1].strip() if len(parts) > 1 else None
+    author = parts[2].strip() if len(parts) > 2 else None
+    
+    await state.set_state(st.CaptureProcess.waiting_for_save)
+    await state.update_data(
+        captured_at=captured_at,
+        focus_time=focus_time,
+        music_title=music_title,
+        author=author
+    )
+    await message.answer(f'Your data is:\n{message.text}', reply_markup=kb.save_or_cnl)
     
 # CHANGE/DELETE BLOCK 
 
@@ -356,3 +356,10 @@ async def process_new_value(message: Message, state: FSMContext):
     
     await message.answer("✅ <b>The entry was successfully updated!</b>", parse_mode=ParseMode.HTML)
     await state.clear()
+
+@router.callback_query(F.data == 'exit')
+async def exit_from_state(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.answer()
+    await callback.message.delete()
+    await callback.message.answer("❌ Action canceled. You are back to the main menu.", reply_markup=kb.main)
