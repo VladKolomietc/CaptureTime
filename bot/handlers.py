@@ -230,11 +230,11 @@ async def Upl_first(message: Message, state: FSMContext):
     if not message.text: return
     parts = message.text.split('\n')
     text = (
-    "You have entered incorrect data. Please try again following this format -\n\n"
-    "<code>dd.mm.yyyy xx:xx\n"
-    "Song\n"
-    "Author</code>\n\n"
-    "The author and title of the song are optional."
+        "You have entered incorrect data. Please try again following this format -\n\n"
+        "<code>dd.mm.yyyy xx:xx\n"
+        "Song\n"
+        "Author</code>\n\n"
+        "The author and title of the song are optional."
     )   
     if not day_data_validation(parts):
         await message.answer(text, parse_mode=ParseMode.HTML, reply_markup=kb.exit_from_state)
@@ -355,3 +355,27 @@ async def exit_from_state(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await callback.message.delete()
     await callback.message.answer("❌ Action canceled. You are back to the main menu.", reply_markup=kb.main)
+
+@router.message(F.text == "Info")
+async def start_change_flow(message: Message):
+    info_text = (
+        "<b>🕒 CaptureTime — your aesthetic time tracker</b>\n\n"
+        "The unique feature of this bot is a clear day-by-day breakdown and the binding of each session to a musical track, capturing not just time, but also your mood. 🎵\n\n"
+        "<b>📥 How to upload data:</b>\n"
+        "• <b>Screenshot</b> of your lock screen (iOS)\n"
+        "• <b>Text</b> in the specified format\n\n"
+        "<i>📌 The bot extracts the date from the screenshot (by priority):</i>\n"
+        "1. From the file name <i>(if sent as a document)</i>\n"
+        "2. From the caption under the photo\n"
+        "3. From the text on the photo itself\n\n"
+        "<i>⚠️ Note: photo recognition limits are currently restricted, so the feature may experience interruptions.</i>\n\n"
+        "<b>🛠 Entry management</b>\n"
+        "If any data was saved incorrectly, you can always fix it via the <b>Change/Delete</b> menu.\n\n"
+        "<b>💻 Commands</b>\n"
+        "<code>/start</code> — register in the system\n"
+        "<code>/cancel</code> — exit to the main menu from any stage\n\n"
+        "<b>📊 Analytics and updates</b>\n"
+        "Currently, a basic list of records and an activity plot are available. Future updates will bring advanced analytics and new data export formats!\n\n"
+        "👨‍💻 Contact the author: @vladyaeto"
+    )
+    await message.answer(text=info_text, parse_mode=ParseMode.HTML)
