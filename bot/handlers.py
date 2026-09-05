@@ -38,7 +38,7 @@ async def global_cancel_handler(message: Message, state: FSMContext):
     await state.clear()
     await message.answer("❌ Action canceled. You are back to the main menu.", reply_markup=kb.main)
 
-@router.message(F.photo | F.document)
+@router.message(F.photo | F.document, st.CaptureProcess.waiting_for_save)
 async def process_screenshot(message: Message, bot: Bot, state: FSMContext):
     processing_msg = await message.answer("👀 Analyzing the screenshot...")
 
@@ -121,7 +121,7 @@ async def save_from_img(callback: CallbackQuery, state: FSMContext):
         f"{callback.message.text}\n\n💾 *Data successfully saved!*",
         parse_mode="Markdown"
     )
-    await state.set_state(st.CaptureProcess.waiting_for_save)
+    await state.set_data({})
 
 @router.callback_query(F.data == 'cancel', st.CaptureProcess.waiting_for_save)
 async def cancel_save(callback: CallbackQuery, state: FSMContext):
@@ -130,7 +130,7 @@ async def cancel_save(callback: CallbackQuery, state: FSMContext):
         f"{callback.message.text}\n\n❌ *The save was cancelled.*",
         parse_mode="Markdown"
     )
-    await state.set_state(st.CaptureProcess.waiting_for_save)
+    await state.set_data({})
 
 # COMMON FUNCTIONS 
 
@@ -208,33 +208,23 @@ async def send_plot(callback: CallbackQuery):
 # UPLOAD BLOCK 
 
 @router.message(F.text == 'Upload')
-async def upload_data(message: Message, state: FSMContext):
+async def txt_upload(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer('Choose a format of data to upload', reply_markup=kb.uplo)
-
-@router.callback_query(F.data == 'txt_upload')
-async def txt_upload(callback: CallbackQuery, state: FSMContext):
-    await callback.answer('')
     await state.set_state(st.CaptureProcess.waiting_for_save)
+    reference=FSInputFile('system_photos/reference.jpg')
     text = (
         "🕒 <b>New entry for CaptureTime</b>\n\n"
         "Submit your data in the following format:\n"
         "<code>dd.mm.yyyy xx:xx \nSong \nAuthor</code>\n\n"
-        "<i>💡Note: song title and artist are optional.</i>"
+        "<i>💡Note: song title and artist are optional.\n\n</i>"
     )
-    await callback.message.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=kb.exit_from_state)
+    await message.answer(text, parse_mode=ParseMode.HTML, reply_markup=kb.exit_from_state)
+    await message.answer_document(
+        document=reference,
+        caption='<i>Or you can send photo like this one:</i>',
+        parse_mode=ParseMode.HTML
+    ) 
     
-@router.callback_query(F.data == 'img_upload')
-async def img_upload(callback: CallbackQuery):
-    await callback.answer('')
-
-    reference=FSInputFile('system_photos/reference.jpg')
-    await callback.message.delete()
-    await callback.message.answer_photo(
-        photo=reference,
-        caption='Send photo like this one:'
-    )    
-
 @router.message(st.CaptureProcess.waiting_for_save)
 async def Upl_first(message: Message, state: FSMContext):
     if not message.text: return
@@ -247,7 +237,7 @@ async def Upl_first(message: Message, state: FSMContext):
     "The author and title of the song are optional."
     )   
     if not day_data_validation(parts):
-        await message.answer(text, parse_mode=ParseMode.HTML)
+        await message.answer(text, parse_mode=ParseMode.HTML, reply_markup=kb.exit_from_state)
         return 
     
     captured_at, focus_time = (parts[0].strip()).split(" ")
@@ -351,6 +341,8 @@ async def process_new_value(message: Message, state: FSMContext):
         if not re.match(r"^\d{1,2}:\d{2}$", new_value):
             await message.answer("❌ Incorrect format! Write in XX:XX format:")
             return
+        hours, minutes = map(int, new_value.split(":"))
+        new_value = hours * 60 + minutes
 
     await db.update_entry(songID, db_column, new_value)
     
